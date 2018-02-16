@@ -57,7 +57,7 @@
 #               RESTORE
 #                 Ein Restore wird fehlerhaft beendet
 #               COPY
-#                 Eine Migrations-Operation wird fehlerhaft beendet. 
+#                 Eine Migrations-Operation wird fehlerhaft beendet.
 #                 Eine Migrations-Operation beinhaltet eine oder mehrere Migrations-
 #                 Prozesse
 #               COPY_SAVESET
@@ -102,13 +102,30 @@ send_backup_mail()
 read_ini
 . "${gv_rw_ini}/sesam2000.profile" >/dev/null 2>&1
 echo "$0" "$*" >> "${gv_rw_lgc}/sm_alarm.lgc"
+
 customer=`sm_db "SELECT customer FROM accounts WHERE account_name = 'sm_alarm'" | head -n 1 | cut -d "=" -f 2 | cut -d "|" -f 1`
+
+GETV_PATH="/var/run"
+GETV_FILE="sm_alarm_get_volume"
+GETV="$GETV_PATH/$GETV_FILE"
+DELAY=120 # Minuten
+
 case $1 in
    INIT)
      send_mail "Alarm INIT: $1" "$2"
      ;;
    GET_VOLUME)
-     send_mail "Alarm GET_VOLUME: $1" "$2";
+     OLD=`cat $GETV`
+     if [ "$OLD" != "$1 $2" ]; then
+     	send_mail "$1" "$2"
+      	echo "$1 $2" > $GETV
+     else
+      	find $GETV_PATH -name "$GETV_FILE" -cmin +$DELAY 2>/dev/null | grep "$GETV_FILE" >/dev/null 2>&1
+     	if [ $? -eq 0 ]; then
+            	send_mail "$1" "$2"
+             	echo "$1 $2" > $GETV
+       	fi
+     fi
      ;;
    BACKUP)
      send_backup_mail "$1" "$2";

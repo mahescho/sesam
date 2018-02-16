@@ -31,11 +31,11 @@
 #               RESTORE
 #                 A restore process has been finished successfully.
 #               COPY
-#                 A migration operation has been finished successfully. 
+#                 A migration operation has been finished successfully.
 #                 A migration operation contains one or more saveset migration processes.
 #               COPY_SAVESET
-#                 A migration task process has been finished successfully. 
-#                 This event will be triggerd on migration of each saveset 
+#                 A migration task process has been finished successfully.
+#                 This event will be triggerd on migration of each saveset
 #                 in a migration oparation.
 #               NEWDAY
 #                 A Sesam NewDay event has been started
@@ -57,7 +57,7 @@
 #               $2 = Textmeldung
 #
 # Module      : ALL_JOBS_DONE
-#                 Wird ausgeloest nach Beendigung des letzten geplanten Events des 
+#                 Wird ausgeloest nach Beendigung des letzten geplanten Events des
 #                 Sesam-Tages. Dient als KeepAlive-Meldung und Tageszusammenfassung.
 #               INIT
 #                 Das Initialisieren (Bereitstellen) eines Mediums wurde erfolgreich beendet.
@@ -71,10 +71,10 @@
 #               RESTORE
 #                 Ein Restore-Prozess wurde erfolgreich beendet.
 #               COPY
-#                 Eine Migrations-Operation wurde erfolgreich beendet. 
+#                 Eine Migrations-Operation wurde erfolgreich beendet.
 #                 Eine Migrations-Operation besteht aus einer oder mehreren Saveset Migrationen.
 #               COPY_SAVESET
-#                 Die Migration eines Savesets wurde erfolgreich abgeschlossen. 
+#                 Die Migration eines Savesets wurde erfolgreich abgeschlossen.
 #                 Dieses Event wird bei jedem Saveset einer Migrations-Operation ausgeloest.
 #               NEWDAY
 #                 Ein Sesam Tageswechsel wurde gestartet.
@@ -88,7 +88,7 @@
 #
 #*******************************************************************************
 #
-# Example 
+# Example
 
 
 read_ini()
@@ -101,7 +101,7 @@ send_mail()
    ## Set mail subject
    mail_subject="$customer / Sesam NOTIFY: $1"
    mail_text="$2"
-   sm_smtp -A "sesam" -s "$mail_subject" -m "$mail_text" 
+   sm_smtp -A "sesam" -s "$mail_subject" -m "$mail_text"
 }
 
 send_mail_file()
@@ -110,7 +110,7 @@ send_mail_file()
    mail_subject="$customer / Sesam NOTIFY: $1 $2"
    mail_text="$3"
    ## Send Sesam status file as mail body
-   sm_smtp -A "sesam" -s "$mail_subject" -M "$mail_text" 
+   sm_smtp -A "sesam" -s "$mail_subject" -M "$mail_text"
 }
 
 
@@ -119,14 +119,14 @@ send_status_mail()
    ## Set mail subject
    mail_subject="$customer / Sesam NOTIFY: backup status: $1"
    ## Send Sesam status as mail text and protocol file as mail attachment
-   sm_smtp -A "sesam" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:" 
+   sm_smtp -A "sesam" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:"
 }
 
 unload_tape()
 {
-   ## Unload tape from a stand alone drive. First parameter is sesam drive no. 
+   ## Unload tape from a stand alone drive. First parameter is sesam drive no.
    ## Send Sesam status as mail text and protocol file as mail attachment
-   sm_drive dismount $1 unload 
+   sm_drive dismount $1 unload
 }
 
 load_to_slot()
@@ -143,8 +143,14 @@ read_ini
 . "${gv_rw_ini}/sesam2000.profile" >/dev/null 2>&1
 
 LOGFILE="${gv_rw_lgc}/sm_notify_`sm_glbv r gv_daylbl 2>/dev/null`.log"
-customer=`sm_db "SELECT customer FROM accounts WHERE account_name = 'sm_notify'" | head -n 1 | cut -d "=" -f 2 | cut -d "|" -f 1`
 echo "$0" "$*" >> "${LOGFILE}"
+
+customer=`sm_db "SELECT customer FROM accounts WHERE account_name = 'sm_notify'" | head -n 1 | cut -d "=" -f 2 | cut -d "|" -f 1`
+
+GETV_PATH="/var/run"
+GETV_FILE="sm_notify_get_volume"
+GETV="$GETV_PATH/$GETV_FILE"
+DELAY=120 # Minuten
 
 case $1 in
       ALL_JOBS_DONE)
@@ -153,31 +159,41 @@ case $1 in
          # unload_tape 2;
          ;;
       INIT)
-         # send_mail "$1" "$2"
+         send_mail "$1" "$2"
          ;;
       GET_VOLUME)
-         # send_mail "$1" "$2"
+         OLD=`cat $GETV`
+         if [ "$OLD" != "$1 $2" ]; then
+                send_mail "$1" "$2"
+                echo "$1 $2" > $GETV
+         else
+                find $GETV_PATH -name "$GETV_FILE" -cmin +$DELAY 2>/dev/null | grep "$GETV_FILE" >/dev/null 2>&1
+                if [ $? -eq 0 ]; then
+                        send_mail "$1" "$2"
+                        echo "$1 $2" > $GETV
+                fi
+         fi
          ;;
       BACKUP)
-         # send_mail "$1" "$2"
+         send_mail "$1" "$2"
          ;;
       RESTORE)
-         # send_mail_file "$1" "$2" "$3"
+         send_mail_file "$1" "$2" "$3"
          ;;
       BACKUP_GROUP:)
-         # send_mail "$1" "$2"
+         send_mail "$1" "$2"
          ;;
       COPY)
-         # send_mail "MIGRATION operation" "$2"
+         send_mail "MIGRATION operation" "$2"
          ;;
       COPY_SAVESET)
-         # send_mail "MIGRATION task" "$2"
+         send_mail "MIGRATION task" "$2"
          ;;
       NEWDAY)
-         # send_mail "NEWDAY event has been started" "$2"
+         send_mail "NEWDAY event has been started" "$2"
          ;;
       SM_NEWDAY)
-         # send_mail "NEWDAY event has been finished" "$2"
+         send_mail "NEWDAY event has been finished" "$2"
          ;;
       *)
       ;;
