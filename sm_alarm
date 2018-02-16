@@ -1,0 +1,132 @@
+#!/bin/sh
+# $Id: sm_alarm,v 1.8 2013/04/08 10:21:35 sesam Exp $
+#******************************************************************************
+#
+# File      : sm_alarm
+# Copyright : (c) SEP AG  D-83607 Holzkirchen
+# Date      : 2017-05-16
+#
+#******************************************************************************
+#
+# Description : This is the alarm interface of SESAM backup utility.
+#               It is called from nearly all SESAM modules, whenever a
+#               fatal error occurs.
+#
+# Parameters  : $1 = Name of module which signals the alarm
+#               $2 = Text of error message
+#
+# Modules     : INIT
+#                 A initialize (preparation) of a medium for backup fails
+#               GET_VOLUME
+#                 A medium has been requested for backup and the operation fails
+#               BACKUP
+#                 A backup process fails
+#               RESTORE
+#                 A restore process fails
+#               COPY
+#                 A migration operation fails. A migration operation contains one
+#                 or more saveset migration processes
+#               COPY_SAVESET
+#                 A migration task process fails. This event will be triggerd on
+#                 migration of each saveset in a migration oparation which fails
+#               MEDIA
+#                 When the High Watermark of a DataStore cannot be undercut.
+#
+# This is a user programmable shell script with 2 parameters.
+# Please insert your specific code lines after this comment.
+# Take care of not inserting commands which wait for an answer from
+# the user ( OK-buttons etc. ) - this may cause a total blocking of
+# backups during the night.
+#
+#********************************************************************************
+# Beschreibung: Dies ist die Alarmschnittstelle der SESAM Sicherungssoftware.
+#               Sie wird von fast allen Modulen im Falle eines Fehlers
+#               aufgerufen.
+#
+# Parameter   : $1 = Name des signalisierenden Moduls
+#               $2 = Text der Meldung
+#
+# Module      : INIT
+#                 Das Initialisieren (Bereitstellen) eines Mediums zum Backup
+#                 schlaegt fehl
+#               GET_VOLUME
+#                 Ein Medium wird angefordert zum Backup und die Operation
+#                 schlaegt fehl
+#               BACKUP
+#                 Ein Backup wird fehlerhaft beendet
+#               RESTORE
+#                 Ein Restore wird fehlerhaft beendet
+#               COPY
+#                 Eine Migrations-Operation wird fehlerhaft beendet. 
+#                 Eine Migrations-Operation beinhaltet eine oder mehrere Migrations-
+#                 Prozesse
+#               COPY_SAVESET
+#                 Die Migration eines Savesets schlaegt fehl. Dieses Event wird bei
+#                 der Migration eines jeden Savesets ausgeloest, welches fehl schlaegt
+#               MEDIA
+#                 Kann die High Watermark eines DataStore nicht unterschritten werden.
+#
+# Dies ist ein benutzerprogrammierbares Shell Skript mit 2 Parametern.
+# Fuegen Sie bitte Ihre eigenen Kommandozeilen nach diesem Kommentar ein,
+# wobei Kommandos, die eine Antwort erwarten ( OK-Buttons etc. ) vermieden
+# werden sollten, da sie Sicherungen waehrend der Nacht blockieren koennten.
+#
+#********************************************************************************
+#
+# Example
+#
+read_ini()
+{
+   . `grep -i '^sm_ini=' /etc/sesam2000.ini|cut -d"=" -f2` 2>/dev/null
+}
+#
+send_mail()
+{
+   ## Set mail subject
+   mail_subject="$customer / Sesam ALARM: $1 $2"
+   ## Send Sesam status file as mail body
+   sm_smtp -A "sesam" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:"
+}
+#
+send_backup_mail()
+{
+   ## Set mail subject
+   mail_subject="Sesam $1 $2"
+   ## Send Sesam not file as mail body
+   f=$( echo $2|cut -d ':' -f 1)
+   echo $f
+   sm_smtp -A "sesam" -s "$mail_subject" -M "$( ls -tr ${gv_rw_lis}/$f*not|tail -1 )" ""
+}
+
+#--------------- MAIN ----------------------
+read_ini
+. "${gv_rw_ini}/sesam2000.profile" >/dev/null 2>&1
+echo "$0" "$*" >> "${gv_rw_lgc}/sm_alarm.lgc"
+customer=`sm_db "SELECT customer FROM accounts WHERE account_name = 'sm_alarm'" | head -n 1 | cut -d "=" -f 2 | cut -d "|" -f 1`
+case $1 in
+   INIT)
+     send_mail "Alarm INIT: $1" "$2"
+     ;;
+   GET_VOLUME)
+     send_mail "Alarm GET_VOLUME: $1" "$2";
+     ;;
+   BACKUP)
+     send_backup_mail "$1" "$2";
+     ;;
+   RESTORE)
+     send_mail "$1" "$2" "$3";
+     ;;
+   COPY)
+     send_mail "MIGRATION operation" "$2"
+     ;;
+   COPY_SAVESET)
+     send_mail "MIGRATION task" "$2"
+     ;;
+   MEDIA)
+     send_mail "$1" "$2"
+     ;;
+   *)
+   send_mail "$1" "$2";
+   ;;
+esac
+exit

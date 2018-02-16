@@ -1,0 +1,265 @@
+#!/bin/sh
+#  $Id: sm_disaster,v 1.20 2013/08/02 09:32:22 kha Exp $
+# ******************************************************************************
+#  
+#   Module    : sm_disaster
+#   Copyright : (c) 2002 SEP AG D-883607 Holzkirchen
+#   Project   : SESAM Backup Utility
+#   Date      : 2017-05-16
+# 
+# ******************************************************************************
+#
+#  >>> This is a user-programmable procedure <<<
+#
+#  >>> Dies ist eine vom Benutzer programmierbare Prozedur <<<
+#
+# ******************************************************************************
+# 
+# Description :
+#    This procedure is executed from a SEP sesam backup when the task name
+#    contains "DISASTER" or "SESAM" (e.g., "SESAM_BACKUP") are detected.
+#
+#    These backups must be configured for disaster recovery, i.e., to save the
+#    files that are needed to recover the SEP sesam Server itself. These are
+#    all the files under the <SEP sesam home> and <SEP sesam home>\var\lis directory,
+#    and the files in SEP sesam's database.
+#
+#    SEP sesam sends the media label with barcode of the used media
+#    and a valid restore command to this procedure. Executing this command 
+#    restores the file of the currently running backup to its original location.
+#
+#    It is strongly recommended to save several copies of this file to different
+#    locations and ensure that it will be available in the event that the SEP sesam
+#    server crashes. For example, you may save it to other computers within
+#    your network or send it by email.
+#
+#    The values for the media label, backup source, barcode in case of a loader or
+#    the value for the datastore path in case of a datastore as well as the restore 
+#    command are as follows:
+#
+#         $1 = Media Label: {label}, Source: {backup source}, Barcode: {barcode}
+#         oder
+#         $1 = Datastore Path: {datastore path}
+#         $2 = {sbc restore command}
+#         $3 = {database export file name}
+#
+#    The example provided below will work if you configure the SEP sesam email for 
+#    the account "sesam" (GUI menu: Configuration -> E-Mail settings -> Create new).
+#    For details on disaster recovery procedure, check 
+#    http://wiki.sepsoftware.com/wiki/index.php/Sesam_Disaster_Recovery_EN.
+#
+#    You can easily edit and modify the script according to your needs.
+#
+# ******************************************************************************
+#
+# Beschreibung 
+#    Dieses Skript wird von SEP sesam nach einer Sicherung aufgerufen, falls der 
+#    Auftragsname "DISASTER" oder "SESAM" beinhaltet (z.B. "SESAM_BACKUP").
+#
+#    Diese Sicherungen sind fuer einen Disaster Fall konfiguriert, d.h. sie sind dafuer
+#    gedacht bei einem Ausfall des SEP Sesam Servers die notwendigen Daten 
+#    wiederherstellt zu koennen. Es handelt sich hierbei um alle Dateien im 
+#    SEP sesam Hauptordner <SEP sesam home> sowie die Dateien des LIS-Verzeichnis
+#    <SEP sesam home>\var\lis sofern diese Dateien nicht im SEP Sesam Hautpordner 
+#    abgelegt sind. Ausserdem sollte die Sesam Datenbank in der Sicherung enthalten sein.
+#
+#    Sesam sendet den Medienlabel und ggf. den Barcode des benutzten Mediums
+#    und ein vollstaendiges Restaurierungskommando an diese Prozedur.
+#    Startet man diese Prozedur von der Komandozeile, so werden alle Dateien
+#    der gelaufenen Sicherung wieder an ihre urspruenglichen Plaetze zurueckkopiert.
+#
+#    Es wird dringend empfohlen mehrere Kopien der verschickten Datei an 
+#    unterschiedlichen Orten aufzubewahren und sicher zu stellen dass sie im Falle
+#    eines SEP sesam Server Ausfalls verfuegbar sind. Die Datei kann z.B. auf anderen
+#    Computer im Netzwerk gespeichert oder per email versandt werden.
+#
+#    Die Werte fuer Medienlabel, Sicherungsquelle, Barcode im Falle eines Laders oder 
+#    den Pfad des Datastore im Falle eines Datastores sowie den Ruecksicherungsbefehl 
+#    selbst werden wie folgt uebergeben:
+#
+#         $1 = Media Label: {label}, Source: {backup source}, Barcode: {barcode}
+#         oder
+#         $1 = Datastore Path: {datastore path}
+#         $2 = {sbc restore command}
+#         $3 = {database export file name}      
+# 
+#    Das nachstehende Beispiel setzt voraus dass eine SEP sesam E-Mail mit dem
+#    Benutzerkonto "sesam" bereits eingerichtet wurde (GUI Menue: Konfiguration -> 
+#    E-Mail Einstellungen -> Neu) Nähere Details zum Thema Disaster Recovery finden 
+#    Sie unter http://wiki.sepsoftware.com/wiki/index.php/Sesam_Disaster_Recovery_EN.
+#
+#    Dieses Skript kann durch einfaches editieren auf Ihre Beduerfnisse angepasst werden.
+#
+# ******************************************************************************
+#
+read_ini()
+{
+  . `grep -i '^sm_ini=' /etc/sesam2000.ini|cut -d"=" -f2` 2>/dev/null
+}
+read_ini
+. ${gv_rw_ini}/sesam2000.profile > /dev/null 2>&1
+VERSION=`echo ${version} | cut -d"," -f2` 2>/dev/null
+
+sqlFile=$3
+if [ -f "${sqlFile}" ]
+then
+   echo "${sqlFile} given by the user"
+else
+   sqlFile=`ls -tr ${gv_rw_db}/backup/sesam_bootstrap_db_* | tail -n1`
+fi
+
+storageInfo=$1
+restoreCmd=$2
+
+customer=`sm_db "SELECT customer FROM accounts WHERE account_name = 'sm_disaster'" | head -n 1 | cut -d "=" -f 2 | cut -d "|" -f 1`
+
+if [ "$lang" = "de" ]
+then
+
+cat <<EOF > ${gv_rw_work}/disaster.tmp
+Im Falle eines Desasters wird der im Anhang befindliche minimale SEP sesam Datenbankexport
+benoetigt um das SEP sesam System wiederherzustellen. Dieser Datenbankexport sollte ausschliesslich
+zur SEP sesam System Wiederherstellung verwendet werden. Speichern Sie diese E-Mail und den Anhang
+an einem sicheren Ort.
+
+VORGEHENSWEISE ZUR WIEDERHERSTELLUNG DES SEP SESAM SYSTEMS:
+
+   1. Speichern Sie den Anhang dieser E-Mail auf dem SEP sesam Server System welches Sie
+      wiederherstellen moechten.
+
+   2. Neuinstallation des SEP sesam Servers:
+
+      Windows
+      =======
+      i.  Doppelklick auf die SEP sesam Server Installationsdatei. Akzeptieren Sie die
+          Lizenzbedingungen und haken Sie 'Desaster Wiederherstellung' an.
+      ii) Fahren Sie mit der Installation wie gewohnt fort, bis Sie zum letzten Dialog
+          'Bereit SEP sesam Server Version <Nummer> zu installieren' kommen. Klicken Sie in
+          der Option 'SEP sesam Server Datenbank importieren' auf 'Durchsuchen' und waehlen
+          Sie die minimale Datenbankexport Datei welche im Schritt 1 gespeichert wurde aus.
+          Dann klicken Sie auf 'Installieren'.
+
+      Linux
+      =======
+      i)  Installieren Sie den SEP sesam Server wie gewohnt.
+      ii) Auf dem neu installierten Server starten sie die SEP sesam GUI. In der Menueleiste
+          waehlen Sie 'Datei'->'Sesam Datenbank importieren'. Waehlen Sie hier die minimale
+          Datenbankexportdatei welche im Schritt 1 gespeichert wurde aus.
+
+   3. In der GUI waehlen Sie 'Hauptauswahl'->'Job Status'->'Sicherungen'. Waehlen Sie dort das
+      juengste SESAM_BACKUP mit der rechten Maustaste aus und waehlen Sie dann 'Ruecksichern'.
+
+   4. Im Schritt 'Auftrag auswaehlen' des Ruecksicherungswizards die Checkbox 'Disaster-Restore'
+      anwaehlen und 'Weiter' druecken.
+
+   5. Im Schritt 'Sichern und Starten' des Ruecksicherungswizards die folgenden Einstellungen
+      vornehmen.
+      - Verwenden Sie die Default 'Ziel-Pfad Einstellungen' 'auf Original-Zielpfad ruecksichern'.
+      - Setzen sie die 'Ausfuehrungs-Optionen' auf 'existierende Dateien ueberschreiben'.
+
+   6. Klicken Sie auf 'Starten' um die Ruecksicherung sofort zu starten.
+
+   7. Nach Beenden der Ruecksicherung erscheint der Dialog 'Disaster Restore abschliessen'.
+      Bestaetigen Sie diesen mit 'OK' um die Datenbank zu importieren.
+
+-----------------------------------------------------------------------------
+
+   Falls sich kein Anhang an dieser Email befindet konnte der minimale Export Ihrer SEP sesam
+   Datenbank nicht durchgefuehrt werden. Details befinden sich in den log Dateien.
+
+   DAS FEHLEN DES MINIMALEN EXPORTS DER SEP sesam DATENBANK KANN ZU PROBLEMEN BEI DER SEP sesam
+   SYSTEM WIEDERHERSTELLUNG FUEHREN.
+
+   Die nachfolgenden Informationen koennen zur Ruecksicherung des SESAM_BACKUPs verwendet werden,
+   falls sich kein Anhang an dieser Email befindet.
+
+      ${storageInfo}
+
+      Ruecksicherungskommandozeile zur Wiederherstellung des SEP sesam Systems:
+      ${restoreCmd}
+
+EOF
+
+   if [ -z "${sqlFile}" ]
+   then
+      mail_subject="$customer / SEP sesam Information zur DESASTER WIEDERHERSTELLUNG von ${gv_server} ${VERSION} IM FALLE VON HARDWARE ODER SOFTWARE DEFEKTEN - Achtung es befindet sich kein Anhang an dieser E-Mail!"
+   else
+      mail_subject="$customer / SEP sesam Information zur DESASTER WIEDERHERSTELLUNG von ${gv_server} ${VERSION} IM FALLE VON HARDWARE ODER SOFTWARE DEFEKTEN"
+   fi
+
+else 
+
+cat <<EOF > ${gv_rw_work}/disaster.tmp
+In the event of disaster, the SEP sesam database export in the attachment is needed to restore the SEP
+sesam system. It should be used exclusively for SEP sesam system recovery. You should save this e-mail
+and the attachment to a safe location.
+
+SEP SESAM SYSTEM RESTORE PROCEDURE:
+
+   1. Save the attachment (bootstrap file) from this e-mail to the SEP sesam Server you intend to recover.
+
+   2. Install the SEP sesam Server:
+
+      Windows
+      =======
+      i.  Double-click the SEP sesam Server installation file. Agree to the license agreement and check the
+          'Disaster Recovery' box in the first dialog.
+      ii. Continue with the installation until you get to the last step 'Ready to Install SEP sesam Server
+          version <number>'. Under the option 'Import SEP sesam Server database' click 'Browse' and select
+          the bootstrap file saved in step 1, then click 'Install'
+
+      Linux
+      =======
+      i.  Install the SEP sesam Server as usual. 
+      ii. On the newly installed server start the SEP sesam GUI, from the menu bar choose 'File' -> 'Import 
+          Sesam Database', and import the bootstrap file saved in step 1.
+
+   3. In the GUI, choose 'Main selection' -> 'Job State' -> 'Backups'. Select the most recent SESAM_BACKUP, 
+      right-click it and select 'Restore'.
+
+   4. In the 'Select task' step of the restore wizard, check the 'Disaster restore' box and click 'Next'. 
+
+   5. In the 'Save and start' step of the restore wizard, select the following settings:
+      - Set the target path to 'Restore to original target path'.
+      - Set the execution options to 'Override existing files'.
+
+   6. Click 'Start' to start the restore immediately.
+
+   7. After the restore has been completed, the dialog 'Complete the disaster restore' appears asking whether
+      you want to import the database automatically. Confirm by clicking 'OK'.
+
+-----------------------------------------------------------------------------
+
+   If this e-mail does not contain an attachment, the minimal export of the SEP sesam database could not be 
+   executed. See log files for details.
+
+   THE ABSENCE OF A MINIMAL EXPORT OF THE SEP sesam DATABASE CAN LEAD TO PROBLEMS IN THE SEP sesam SERVER
+   RESTORE PROCEDURE.
+
+   The following information can be used to restore the SESAM_BACKUP in case the attachment is missing.
+
+      ${storageInfo}
+
+      Restore command line to restore SEP sesam system:
+      ${restoreCmd}
+
+EOF
+
+   if [ -z "${sqlFile}" ]
+   then
+      mail_subject="$customer / SEPsesam prepare for disaster Information of SEPsesam Server ${gv_server} Version ${VERSION} - Attention this e-mail does not contain an attachment!"
+   else
+      mail_subject="$customer / SEPsesam prepare for disaster Information of SEPsesam Server ${gv_server} Version ${VERSION}"
+   fi
+
+fi
+
+# 
+# via SMTP interface with configured email account "sesam" in Sesam GUI
+if [ -z "${sqlFile}" ]
+then
+   sm_smtp -A "sesam" -s "${mail_subject}" -M "${gv_rw_work}/disaster.tmp"
+else
+   sm_smtp -A "sesam" -s "${mail_subject}" -M "${gv_rw_work}/disaster.tmp" -a "${sqlFile}" 
+fi
+

@@ -1,0 +1,3 @@
+# sesam
+
+Sesam Mail-Scripte

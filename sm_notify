@@ -1,0 +1,186 @@
+#!/bin/sh
+#$Id: sm_notify,v 1.13 2013/08/26 16:43:26 sesam Exp $
+#******************************************************************************
+#
+# File      : sm_notify
+# Copyright : (c) SEP AG  D-83607 Holzkirchen
+# Project   : SESAM Backup Utility
+# Date      : 2017-05-16
+#
+#******************************************************************************
+#
+# Description : Template for the SESAM notify interface.
+#               It is called from SESAM after finishing a backup, media change
+#               media init or SESAM day change.
+#
+# Parameters  : $1 = Calling module see below
+#               $2 = message text
+#
+# Modules     : ALL_JOBS_DONE
+#                 Will be triggered after the last planned Sesam event of the Sesam day
+#                 has been finished. Serves as KeepAlive report and Sesam day summary.
+#               INIT
+#                 A initialize (preparation) of a medium for backup has been finished succesfully.
+#               GET_VOLUME
+#                 A medium has been requested for backup and the operation has been
+#                 finished successfully.
+#               BACKUP
+#                 A backup process has been finished successfully.
+#               BACKUP_GROUP
+#                 After the last backup task of a taskgroup has been finished successfully.
+#               RESTORE
+#                 A restore process has been finished successfully.
+#               COPY
+#                 A migration operation has been finished successfully. 
+#                 A migration operation contains one or more saveset migration processes.
+#               COPY_SAVESET
+#                 A migration task process has been finished successfully. 
+#                 This event will be triggerd on migration of each saveset 
+#                 in a migration oparation.
+#               NEWDAY
+#                 A Sesam NewDay event has been started
+#               SM_NEWDAY
+#                 A Sesam NewDay event has been finished
+#
+#     This is a user programable shell script with 2 parameters.
+#     Please insert your specific code-lines after this comment.
+#     Take care of not inserting any command waiting for an answer from
+#     the user ( OK-buttons etc. ) - this may cause a complete blocking of
+#     backups during the night.
+#
+#*******************************************************************************
+# Beschreibung: Dies ist die Notify-Schnittstelle der Sesam Sicherungssoftware.
+#               Sie wird von unterschiedlichen Modules aufgerufen, wenn die
+#               Abarbeitung erfolgreich war.
+#
+# Parameter   : $1 = Aufrufendes Modul, siehe unten
+#               $2 = Textmeldung
+#
+# Module      : ALL_JOBS_DONE
+#                 Wird ausgeloest nach Beendigung des letzten geplanten Events des 
+#                 Sesam-Tages. Dient als KeepAlive-Meldung und Tageszusammenfassung.
+#               INIT
+#                 Das Initialisieren (Bereitstellen) eines Mediums wurde erfolgreich beendet.
+#               GET_VOLUME
+#                 Ein Medium wird wird zum Backup angefordert (z.B. Einlegen des Bandes
+#                 in ein Bandlaufwerk).
+#               BACKUP
+#                 Ein Backup-Prozess wurde erfolgreich beendet.
+#               BACKUP_GROUP
+#                 Nachdem der letzte Backup-Job einer Auftragsgruppe beendet wurde.
+#               RESTORE
+#                 Ein Restore-Prozess wurde erfolgreich beendet.
+#               COPY
+#                 Eine Migrations-Operation wurde erfolgreich beendet. 
+#                 Eine Migrations-Operation besteht aus einer oder mehreren Saveset Migrationen.
+#               COPY_SAVESET
+#                 Die Migration eines Savesets wurde erfolgreich abgeschlossen. 
+#                 Dieses Event wird bei jedem Saveset einer Migrations-Operation ausgeloest.
+#               NEWDAY
+#                 Ein Sesam Tageswechsel wurde gestartet.
+#               SM_NEWDAY
+#                 Ein Sesam Tageswechsel wurde beendet.
+#
+#     Dies ist ein benutzerprogrammierbares Shell Skript mit 2 Parametern.
+#     Fuegen Sie bitte Ihre eigenen Kommandozeilen nach diesem Kommentar ein,
+#     wobei Kommandos, die eine Antwort erwarten ( OK-Buttons etc. ) vermieden
+#     werden sollten, da sie Sicherungen waehrend der Nacht blockieren koennten.
+#
+#*******************************************************************************
+#
+# Example 
+
+
+read_ini()
+{
+  . `grep -i '^sm_ini=' /etc/sesam2000.ini|cut -d"=" -f2` 2>/dev/null
+}
+
+send_mail()
+{
+   ## Set mail subject
+   mail_subject="$customer / Sesam NOTIFY: $1"
+   mail_text="$2"
+   sm_smtp -A "sesam" -s "$mail_subject" -m "$mail_text" 
+}
+
+send_mail_file()
+{
+   ## Set mail subject
+   mail_subject="$customer / Sesam NOTIFY: $1 $2"
+   mail_text="$3"
+   ## Send Sesam status file as mail body
+   sm_smtp -A "sesam" -s "$mail_subject" -M "$mail_text" 
+}
+
+
+send_status_mail()
+{
+   ## Set mail subject
+   mail_subject="$customer / Sesam NOTIFY: backup status: $1"
+   ## Send Sesam status as mail text and protocol file as mail attachment
+   sm_smtp -A "sesam" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:" 
+}
+
+unload_tape()
+{
+   ## Unload tape from a stand alone drive. First parameter is sesam drive no. 
+   ## Send Sesam status as mail text and protocol file as mail attachment
+   sm_drive dismount $1 unload 
+}
+
+load_to_slot()
+{
+   ## Load tape back from drive into slot
+   ## 1st parameter is sesam loader no.
+   ## 2nd parameter is sesam drive no.
+	 sm_loader unload -l $1 -d $2
+}
+
+#--------------- MAIN ----------------------
+
+read_ini
+. "${gv_rw_ini}/sesam2000.profile" >/dev/null 2>&1
+
+LOGFILE="${gv_rw_lgc}/sm_notify_`sm_glbv r gv_daylbl 2>/dev/null`.log"
+customer=`sm_db "SELECT customer FROM accounts WHERE account_name = 'sm_notify'" | head -n 1 | cut -d "=" -f 2 | cut -d "|" -f 1`
+echo "$0" "$*" >> "${LOGFILE}"
+
+case $1 in
+      ALL_JOBS_DONE)
+         send_status_mail "$2";
+         # load_to_slot 1 2;
+         # unload_tape 2;
+         ;;
+      INIT)
+         # send_mail "$1" "$2"
+         ;;
+      GET_VOLUME)
+         # send_mail "$1" "$2"
+         ;;
+      BACKUP)
+         # send_mail "$1" "$2"
+         ;;
+      RESTORE)
+         # send_mail_file "$1" "$2" "$3"
+         ;;
+      BACKUP_GROUP:)
+         # send_mail "$1" "$2"
+         ;;
+      COPY)
+         # send_mail "MIGRATION operation" "$2"
+         ;;
+      COPY_SAVESET)
+         # send_mail "MIGRATION task" "$2"
+         ;;
+      NEWDAY)
+         # send_mail "NEWDAY event has been started" "$2"
+         ;;
+      SM_NEWDAY)
+         # send_mail "NEWDAY event has been finished" "$2"
+         ;;
+      *)
+      ;;
+esac
+
+exit
