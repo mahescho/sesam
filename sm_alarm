@@ -85,7 +85,7 @@ send_mail()
    ## Set mail subject
    mail_subject="$customer / Sesam ALARM: $1 $2"
    ## Send Sesam status file as mail body
-   sm_smtp -A "sesam" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:"
+   sm_smtp -A "sm_alarm" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:"
 }
 #
 send_backup_mail()
@@ -95,7 +95,7 @@ send_backup_mail()
    ## Send Sesam not file as mail body
    f=$( echo $2|cut -d ':' -f 1)
    echo $f
-   sm_smtp -A "sesam" -s "$mail_subject" -M "$( ls -tr ${gv_rw_lis}/$f*not|tail -1 )" ""
+   sm_smtp -A "sm_alarm" -s "$mail_subject" -M "$( ls -tr ${gv_rw_lis}/$f*not|tail -1 )" ""
 }
 
 #--------------- MAIN ----------------------

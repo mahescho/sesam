@@ -101,7 +101,7 @@ send_mail()
    ## Set mail subject
    mail_subject="$customer / Sesam NOTIFY: $1"
    mail_text="$2"
-   sm_smtp -A "sesam" -s "$mail_subject" -m "$mail_text"
+   sm_smtp -A "sm_notify" -s "$mail_subject" -m "$mail_text"
 }
 
 send_mail_file()
@@ -110,7 +110,7 @@ send_mail_file()
    mail_subject="$customer / Sesam NOTIFY: $1 $2"
    mail_text="$3"
    ## Send Sesam status file as mail body
-   sm_smtp -A "sesam" -s "$mail_subject" -M "$mail_text"
+   sm_smtp -A "sm_notify" -s "$mail_subject" -M "$mail_text"
 }
 
 
@@ -119,7 +119,7 @@ send_status_mail()
    ## Set mail subject
    mail_subject="$customer / Sesam NOTIFY: backup status: $1"
    ## Send Sesam status as mail text and protocol file as mail attachment
-   sm_smtp -A "sesam" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:"
+   sm_smtp -A "sm_notify" -s "$mail_subject" -M "gv_dayfile:" -a "gv_prot:"
 }
 
 unload_tape()
