@@ -115,7 +115,7 @@ case $1 in
      send_mail "Alarm INIT: $1" "$2"
      ;;
    GET_VOLUME)
-     OLD=`cat $GETV`
+       OLD=$(cat $GETV 2>/dev/null)
      if [ "$OLD" != "$1 $2" ]; then
      	send_mail "$1" "$2"
       	echo "$1 $2" > $GETV
